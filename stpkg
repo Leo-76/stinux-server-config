@@ -1,0 +1,289 @@
+#!/usr/bin/env python3
+"""
+StinuxCLI — Gestionnaire de paquets universel
+Style OpenCore — terminal minimaliste
+"""
+
+import os
+import sys
+import subprocess
+import shutil
+
+VERSION = "1.0"
+
+RESET  = "\033[0m"
+BOLD   = "\033[1m"
+BLUE   = "\033[34m"
+CYAN   = "\033[36m"
+GREEN  = "\033[32m"
+YELLOW = "\033[33m"
+RED    = "\033[31m"
+GRAY   = "\033[90m"
+
+MANAGERS = {
+    "apt":      {"check": "apt",      "install": "apt install -y",     "remove": "apt remove -y",     "search": "apt search",     "update": "apt update && apt upgrade -y"},
+    "apk":      {"check": "apk",      "install": "apk add",            "remove": "apk del",           "search": "apk search",     "update": "apk update && apk upgrade"},
+    "pacman":   {"check": "pacman",   "install": "pacman -S --noconfirm","remove": "pacman -R",        "search": "pacman -Ss",     "update": "pacman -Syu --noconfirm"},
+    "dnf":      {"check": "dnf",      "install": "dnf install -y",     "remove": "dnf remove -y",     "search": "dnf search",     "update": "dnf upgrade -y"},
+    "zypper":   {"check": "zypper",   "install": "zypper install -y",  "remove": "zypper remove -y",  "search": "zypper search",  "update": "zypper update -y"},
+    "flatpak":  {"check": "flatpak",  "install": "flatpak install -y", "remove": "flatpak uninstall", "search": "flatpak search", "update": "flatpak update -y"},
+    "snap":     {"check": "snap",     "install": "snap install",       "remove": "snap remove",       "search": "snap find",      "update": "snap refresh"},
+    "pip":      {"check": "pip3",     "install": "pip3 install",       "remove": "pip3 uninstall -y", "search": "pip3 search",    "update": "pip3 install --upgrade pip"},
+    "npm":      {"check": "npm",      "install": "npm install -g",     "remove": "npm uninstall -g",  "search": "npm search",     "update": "npm update -g"},
+    "cargo":    {"check": "cargo",    "install": "cargo install",      "remove": "cargo uninstall",   "search": "cargo search",   "update": "cargo install-update -a"},
+}
+
+MODULES = {
+    "network": {
+        "desc": "SSH, DHCP, outils réseau",
+        "packages": {"apt": ["openssh-server", "net-tools", "curl", "wget", "isc-dhcp-client"]}
+    },
+    "gui": {
+        "desc": "Xorg + Openbox + tint2",
+        "packages": {"apt": ["xorg", "openbox", "tint2", "feh", "xterm"]}
+    },
+    "dev": {
+        "desc": "Git, Python, GCC, Node.js",
+        "packages": {"apt": ["git", "python3", "python3-pip", "gcc", "make", "nodejs", "npm"]}
+    },
+    "docker": {
+        "desc": "Docker + Distrobox (Arch, Alpine, Fedora)",
+        "packages": {"apt": ["docker.io", "distrobox"]}
+    },
+    "media": {
+        "desc": "VLC, FFmpeg, MPV",
+        "packages": {"apt": ["vlc", "ffmpeg", "mpv"]}
+    },
+    "gaming": {
+        "desc": "RetroArch, Steam",
+        "packages": {"apt": ["retroarch", "steam"]}
+    },
+}
+
+
+def clear():
+    os.system("clear")
+
+
+def header():
+    print(f"{BLUE}{BOLD}")
+    print("  ╔═══════════════════════════════════════╗")
+    print(f"  ║        StinuxCLI v{VERSION}                 ║")
+    print("  ║   Gestionnaire de paquets universel   ║")
+    print("  ╚═══════════════════════════════════════╝")
+    print(f"{RESET}")
+
+
+def available_managers():
+    available = []
+    for name, info in MANAGERS.items():
+        if shutil.which(info["check"]):
+            available.append(name)
+    return available
+
+
+def run(cmd):
+    print(f"{GRAY}$ {cmd}{RESET}")
+    result = subprocess.run(cmd, shell=True)
+    return result.returncode == 0
+
+
+def menu_main():
+    while True:
+        clear()
+        header()
+        avail = available_managers()
+        print(f"  {GREEN}Gestionnaires disponibles :{RESET} {', '.join(avail)}\n")
+        print(f"  {CYAN}1{RESET}  Installer un paquet")
+        print(f"  {CYAN}2{RESET}  Supprimer un paquet")
+        print(f"  {CYAN}3{RESET}  Chercher un paquet")
+        print(f"  {CYAN}4{RESET}  Mettre à jour le système")
+        print(f"  {CYAN}5{RESET}  Modules StinuxCLI")
+        print(f"  {CYAN}6{RESET}  Gestionnaires disponibles")
+        print(f"  {CYAN}7{RESET}  Shell")
+        print(f"  {CYAN}0{RESET}  Quitter\n")
+        choice = input(f"  {BOLD}>{RESET} ").strip()
+
+        if choice == "1":
+            menu_install(avail)
+        elif choice == "2":
+            menu_remove(avail)
+        elif choice == "3":
+            menu_search(avail)
+        elif choice == "4":
+            menu_update(avail)
+        elif choice == "5":
+            menu_modules(avail)
+        elif choice == "6":
+            menu_managers(avail)
+        elif choice == "7":
+            os.system("/bin/bash")
+        elif choice == "0":
+            print(f"\n  {GRAY}À bientôt.{RESET}\n")
+            sys.exit(0)
+
+
+def menu_install(avail):
+    clear()
+    header()
+    print(f"  {CYAN}INSTALLER UN PAQUET{RESET}\n")
+    pkg = input(f"  Nom du paquet : ").strip()
+    if not pkg:
+        return
+
+    print(f"\n  {CYAN}Choisir le gestionnaire :{RESET}")
+    for i, m in enumerate(avail, 1):
+        print(f"  {CYAN}{i}{RESET}  {m}")
+    print(f"  {CYAN}0{RESET}  Annuler\n")
+
+    choice = input(f"  {BOLD}>{RESET} ").strip()
+    if choice == "0" or not choice.isdigit():
+        return
+
+    idx = int(choice) - 1
+    if 0 <= idx < len(avail):
+        mgr = avail[idx]
+        cmd = f"sudo {MANAGERS[mgr]['install']} {pkg}"
+        print()
+        run(cmd)
+    input(f"\n  {GRAY}Appuyer sur Entrée...{RESET}")
+
+
+def menu_remove(avail):
+    clear()
+    header()
+    print(f"  {CYAN}SUPPRIMER UN PAQUET{RESET}\n")
+    pkg = input(f"  Nom du paquet : ").strip()
+    if not pkg:
+        return
+
+    print(f"\n  {CYAN}Choisir le gestionnaire :{RESET}")
+    for i, m in enumerate(avail, 1):
+        print(f"  {CYAN}{i}{RESET}  {m}")
+    print(f"  {CYAN}0{RESET}  Annuler\n")
+
+    choice = input(f"  {BOLD}>{RESET} ").strip()
+    if choice == "0" or not choice.isdigit():
+        return
+
+    idx = int(choice) - 1
+    if 0 <= idx < len(avail):
+        mgr = avail[idx]
+        cmd = f"sudo {MANAGERS[mgr]['remove']} {pkg}"
+        print()
+        run(cmd)
+    input(f"\n  {GRAY}Appuyer sur Entrée...{RESET}")
+
+
+def menu_search(avail):
+    clear()
+    header()
+    print(f"  {CYAN}CHERCHER UN PAQUET{RESET}\n")
+    pkg = input(f"  Terme de recherche : ").strip()
+    if not pkg:
+        return
+
+    print(f"\n  {CYAN}Choisir le gestionnaire :{RESET}")
+    for i, m in enumerate(avail, 1):
+        print(f"  {CYAN}{i}{RESET}  {m}")
+    print(f"  {CYAN}0{RESET}  Annuler\n")
+
+    choice = input(f"  {BOLD}>{RESET} ").strip()
+    if choice == "0" or not choice.isdigit():
+        return
+
+    idx = int(choice) - 1
+    if 0 <= idx < len(avail):
+        mgr = avail[idx]
+        cmd = f"{MANAGERS[mgr]['search']} {pkg}"
+        print()
+        run(cmd)
+    input(f"\n  {GRAY}Appuyer sur Entrée...{RESET}")
+
+
+def menu_update(avail):
+    clear()
+    header()
+    print(f"  {CYAN}METTRE À JOUR{RESET}\n")
+    print(f"  {CYAN}Choisir le gestionnaire :{RESET}")
+    for i, m in enumerate(avail, 1):
+        print(f"  {CYAN}{i}{RESET}  {m}")
+    print(f"  {CYAN}a{RESET}  Tous")
+    print(f"  {CYAN}0{RESET}  Annuler\n")
+
+    choice = input(f"  {BOLD}>{RESET} ").strip()
+
+    if choice == "0":
+        return
+    elif choice == "a":
+        for mgr in avail:
+            print(f"\n  {YELLOW}→ Mise à jour {mgr}...{RESET}")
+            run(f"sudo {MANAGERS[mgr]['update']}")
+    elif choice.isdigit():
+        idx = int(choice) - 1
+        if 0 <= idx < len(avail):
+            mgr = avail[idx]
+            run(f"sudo {MANAGERS[mgr]['update']}")
+
+    input(f"\n  {GRAY}Appuyer sur Entrée...{RESET}")
+
+
+def menu_modules(avail):
+    while True:
+        clear()
+        header()
+        print(f"  {CYAN}MODULES STINUXCLI{RESET}\n")
+        keys = list(MODULES.keys())
+        for i, key in enumerate(keys, 1):
+            mod = MODULES[key]
+            print(f"  {CYAN}{i}{RESET}  {key:<12} {GRAY}{mod['desc']}{RESET}")
+        print(f"\n  {CYAN}0{RESET}  Retour\n")
+
+        choice = input(f"  {BOLD}>{RESET} ").strip()
+        if choice == "0":
+            return
+        if not choice.isdigit():
+            continue
+
+        idx = int(choice) - 1
+        if 0 <= idx < len(keys):
+            key = keys[idx]
+            mod = MODULES[key]
+            clear()
+            header()
+            print(f"  {CYAN}MODULE : {key.upper()}{RESET}")
+            print(f"  {GRAY}{mod['desc']}{RESET}\n")
+
+            mgr = None
+            for m in avail:
+                if m in mod["packages"]:
+                    mgr = m
+                    break
+
+            if not mgr:
+                print(f"  {RED}Aucun gestionnaire compatible disponible.{RESET}")
+            else:
+                pkgs = " ".join(mod["packages"][mgr])
+                print(f"  Gestionnaire : {GREEN}{mgr}{RESET}")
+                print(f"  Paquets      : {pkgs}\n")
+                confirm = input(f"  Installer ? (o/n) : ").strip().lower()
+                if confirm == "o":
+                    run(f"sudo {MANAGERS[mgr]['install']} {pkgs}")
+
+            input(f"\n  {GRAY}Appuyer sur Entrée...{RESET}")
+
+
+def menu_managers(avail):
+    clear()
+    header()
+    print(f"  {CYAN}GESTIONNAIRES DISPONIBLES{RESET}\n")
+    all_mgrs = list(MANAGERS.keys())
+    for mgr in all_mgrs:
+        status = f"{GREEN}✓ disponible{RESET}" if mgr in avail else f"{GRAY}✗ non installé{RESET}"
+        print(f"  {mgr:<12} {status}")
+    print()
+    input(f"  {GRAY}Appuyer sur Entrée...{RESET}")
+
+
+if __name__ == "__main__":
+    menu_main()
